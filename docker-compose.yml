@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+  ekuiper:
+    image: lfedge/ekuiper:latest
+    container_name: ekuiper
+    ports:
+      - "9081:9081"
+      - "20498:20498"
+    depends_on:
+      - mosquitto
+    environment:
+      MQTT_SOURCE__DEFAULT__SERVERS: "tcp://mosquitto:1883"

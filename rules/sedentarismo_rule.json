@@ -1,0 +1,9 @@
+{
+  "id": "sedentarismo_rule",
+  "sql": "SELECT value FROM watch_stream WHERE sensor = 'steps' AND value < 50",
+  "actions": [
+    {
+      "log": {}
+    }
+  ]
+}
