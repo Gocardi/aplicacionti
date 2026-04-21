@@ -8,7 +8,7 @@ MAC_ADDRESS = "78:02:B7:04:15:D5"
 WRITE_CHAR_UUID = "000033f1-0000-1000-8000-00805f9b34fb"
 NOTIFY_CHAR_UUID = "000033f2-0000-1000-8000-00805f9b34fb"
 
-MQTT_BROKER = "localhost"
+MQTT_BROKER = "127.0.0.1"
 MQTT_PORT = 1883
 MQTT_TOPIC_TX = "sensors/watch"
 MQTT_TOPIC_RX = "edge/acciones"
@@ -17,14 +17,26 @@ MQTT_TOPIC_RX = "edge/acciones"
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 ble_client_global = None
 
+def on_connect(client, userdata, flags, reason_code, properties):
+    if reason_code == 0:
+        print(f"✅ EVENTO MQTT: CONEXIÓN CONFIRMADA con el Broker")
+    else:
+        print(f"❌ EVENTO MQTT: FALLO DE CONEXIÓN. Código: {reason_code}")
+
+def on_publish(client, userdata, mid, reason_code=None, properties=None):
+    print(f"📤 EVENTO MQTT: MENSAJE {mid} ENTREGADO AL BROKER Y CONFIRMADO")
+
 def notification_handler(sender, data):
+    print(f"📡 NOTIFICACIÓN BLE CRUDA (Hex): {data.hex()}")
     if len(data) > 0:
         header = data[0]
         # Command 0xB2: Pasos
         if header == 0xB2 and len(data) >= 6:
             steps = struct.unpack('<I', data[2:6])[0]
-            print(f"🔔 Pasos actualizados: {steps}")
-            mqtt_client.publish(MQTT_TOPIC_TX, f'{{"sensor": "steps", "value": {steps}}}')
+            print(f"🔔 EVENTO BLE: Pasos decodificados: {steps}")
+            print(f"➡️  Intentando inyectar al buffer MQTT...")
+            res = mqtt_client.publish(MQTT_TOPIC_TX, f'{{"sensor": "steps", "value": {steps}}}')
+            print(f"ℹ️  STATUS DEL BUFFER MQTT -> rc_code (0=OK): {res.rc}, mid: {res.mid}")
 
 def on_message(client, userdata, msg):
     print(f"Recibido mensaje en MQTT: {msg.topic}")
@@ -47,6 +59,8 @@ async def main():
     asyncio.get_running_loop()
     
     # Connect to MQTT
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_publish = on_publish
     mqtt_client.on_message = on_message
     try:
         mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
