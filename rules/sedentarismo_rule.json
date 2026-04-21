@@ -1,9 +1,13 @@
 {
   "id": "sedentarismo_rule",
-  "sql": "SELECT value FROM watch_stream WHERE sensor = 'steps' AND value < 50",
+  "sql": "SELECT max(value) - min(value) AS pasos_recientes FROM watch_stream WHERE sensor = 'steps' GROUP BY TumblingWindow(ss, 60) HAVING pasos_recientes < 5",
   "actions": [
     {
-      "log": {}
+      "mqtt": {
+        "server": "tcp://mosquitto:1883",
+        "topic": "edge/acciones",
+        "sendSingle": true
+      }
     }
   ]
 }

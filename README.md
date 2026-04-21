@@ -1,68 +1,53 @@
 # Proyecto AplicacionTI: IoT y Edge Computing
 
-Este proyecto es una demostración práctica para ilustrar los conceptos de Computación Ubicua y Edge Computing, conectando un reloj inteligente Togala P99 a un entorno basado en Arch Linux e integrando análisis local mediante MQTT y LF Edge eKuiper.
+Este proyecto es una demostración práctica de Computación Ubicua y Edge Computing en un entorno Arch Linux.
 
-## Conceptos Clave
+El ecosistema integra datos extraídos vía BLE desde un smartwatch Togala P99. Estos datos viajan a través de los siguientes componentes para detectar eventos de inactividad (sedentarismo) y accionar el entorno local:
+**Sensor (Smartwatch) -> Bridge (Python) -> Broker (Mosquitto) -> Motor de Reglas (LF Edge eKuiper) -> Acción (Reproductor Multimedia Local)**
 
-- **Computación Ubicua:** Integración de la tecnología de manera imperceptible en nuestro entorno. En este proyecto, el smartwatch interacciona de forma autónoma (como detectar inactividad, reproductor multimedia) actuando en pro del bienestar y conveniencia del usuario.
-- **Edge Computing:** Consiste en procesar la información cerca del sitio en donde se generan los datos en lugar de mandarla a una nube centralizada. Los datos del smartwatch se procesan localmente de forma ultra-rápida (en eKuiper de LF Edge), lo que permite respuestas de baja latencia (ej. alertas de sedentarismo) sin comprometer la privacidad del usuario al no enviar los datos personales sin procesar a internet.
+## Flujo Operativo y Conceptos
+- **Computación Ubicua:** Integración imperceptible. El usuario lleva el reloj y su actividad afecta directamente al entorno (si no camina, la música se pausa automáticamente).
+- **Edge Computing:** Todos los datos se procesan "en el borde". eKuiper evalúa la cantidad de pasos enventanados en intervalos de tiempo localmente, publicando una alerta a Mosquitto (tópico `edge/acciones`), todo sin enviar datos a la nube.
 
-## Estructura del Proyecto
+## Prerrequisitos (Arch Linux)
 
-1. **Bridge BLE-MQTT (`bridge/bridge.py`):** Un script asíncrono en Python usando `bleak` para extraer los datos del smartwatch vía el protocolo Bluetooth Low Energy (GLoryFit) e inyectarlos de manera normalizada a un broker de mensajería (Mosquitto). También acciona comandos locales de linux.
-2. **Broker de Mensajería:** Mosquitto corriendo en Docker, sirviendo como la "columna vertebral" del ecosistema en el Edge.
-3. **Procesamiento de Reglas en eKuiper (`rules/`):** Utilizado para ingestar streams de datos de MQTT en tiempo real y ejecutar reglas del tipo SQL. En este caso detecta eventos de "sedentarismo".
-
-## Prerrequisitos en Arch Linux
-
-Es imprescindible instalar las herramientas para contenedores, clientes Bluetooth, y Python en tu ambiente Arch Linux:
-
+Asegúrate de instalar los paquetes clave:
 ```bash
-sudo pacman -Syu
 sudo pacman -S docker docker-compose python-pip mosquitto playerctl
 ```
+Y de iniciar tu servicio de Docker: `sudo systemctl enable --now docker`
 
-*(Nota: Asegúrate de habilitar e iniciar el servicio Docker: `sudo systemctl enable --now docker`)*
+## Levantar el Entorno y Dependencias
 
-## Guía de Instalación y Ejecución
-
-**1. Desplegar los Contenedores (Edge Core)**
-
-Inicia Mosquitto y LF Edge eKuiper como demonios mediante docker-compose:
-
+**1. Contenedores Base (Mosquitto & eKuiper):**
+Desde la carpeta raíz del proyecto ejecuta:
 ```bash
 docker-compose up -d
 ```
-Verifica que los servicios estén activos: `docker-compose ps`
 
-**2. Instalar dependencias de Python para el Bridge**
-
-Desde la carpeta raíz del proyecto, instala las librerías `bleak` y `paho-mqtt` que nos permiten la comunicación Bluetooth Asíncrona respectiva:
-
+**2. Descargar las Librerías Python:**
 ```bash
 pip install -r bridge/requirements.txt
 ```
 
-**3. Levantar el Bridge BLE -> Edge**
-
-Asegúrate de que el Smartwatch esté encendido y dentro del alcance. Luego ejecuta:
-
+## Ejecución del Puente BLE-MQTT
+Asegúrate de que tu reloj Togala P99 tenga el Bluetooth encendido y ejecuta el bridge asíncrono para enganchar tu hardware a Mosquitto:
 ```bash
 python bridge/bridge.py
 ```
 
-**4. Dar de Alta el Stream y la Regla en eKuiper**
+## Crear Configuración en eKuiper
 
-Mientras el bridge se ejecuta, manda las siguientes instrucciones HTTP a la API REST de eKuiper (puerto 9081) usando `curl` o un cliente similar:
+A la par de la ejecución de la app, manda estos requests para formalizar la regla de negocio y analizar los streams en tiempo real:
 
-**Crear el Stream:**
+**Registrar Stream (Fuente de datos):**
 ```bash
 curl -X POST http://localhost:9081/streams -H "Content-Type: application/json" -d '{"sql": "CREATE STREAM watch_stream () WITH (DATASOURCE=\"sensors/watch\", FORMAT=\"json\")"}'
 ```
 
-**Asignar la Regla de Sedentarismo:**
+**Asignar Regla de Sedentarismo:**
 ```bash
 curl -X POST http://localhost:9081/rules -H "Content-Type: application/json" -d @rules/sedentarismo_rule.json
 ```
 
-Si el smartwatch reporta pocos pasos, eKuiper detectará el evento y dejará un informe en los logs del contenedor (ej: `docker logs ekuiper`). Además, los toques táctiles del reproductor en el smartwatch aplicarán `playerctl play-pause` nativamente.
+Si tus pasos tomados no superan el threshold (pasos < 5 en una ventana de 60 segundos), eKuiper desencadenará el evento en `edge/acciones`, lo cual pausará localmente tu música mediante `playerctl` e instruirá al smartwatch a que envíe una ráfaga táctica (vibración).
