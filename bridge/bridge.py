@@ -1,7 +1,7 @@
 import asyncio
 import os
 import struct
-from bleak import BleakClient
+from bleak import BleakClient, BleakScanner
 import paho.mqtt.client as mqtt
 
 MAC_ADDRESS = "78:02:B7:04:15:D5"
@@ -71,8 +71,16 @@ async def main():
         print(f"Error conectando a MQTT: {e}")
         return
 
-    print(f"Conectando al Smartwatch con MAC {MAC_ADDRESS}...")
-    async with BleakClient(MAC_ADDRESS, timeout=30.0) as client:
+    print(f"Buscando el Smartwatch con MAC {MAC_ADDRESS} en el aire...")
+    device = await BleakScanner.find_device_by_address(MAC_ADDRESS, timeout=20.0)
+    
+    if not device:
+        print(f"❌ NO SE ENCONTRÓ EL RELOJ. ¿Seguro que la MAC es {MAC_ADDRESS} y el Bluetooth del celular está APAGADO?")
+        print("Tip: Verifica que la MAC no haya cambiado (usa bluetoothctl scan on para confirmar).")
+        return
+
+    print(f"✅ Reloj encontrado ({device.name}). Conectando...")
+    async with BleakClient(device, timeout=30.0) as client:
         ble_client_global = client
         print("Conectado exitosamente al Smartwatch.")
         
