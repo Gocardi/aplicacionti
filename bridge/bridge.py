@@ -72,7 +72,7 @@ async def main():
         return
 
     print(f"Conectando al Smartwatch con MAC {MAC_ADDRESS}...")
-    async with BleakClient(MAC_ADDRESS) as client:
+    async with BleakClient(MAC_ADDRESS, timeout=30.0) as client:
         ble_client_global = client
         print("Conectado exitosamente al Smartwatch.")
         
